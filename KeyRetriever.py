@@ -1,27 +1,31 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import os
-import cgi
-import urllib.parse
-import uuid
 import random
 import string
 
 UPLOAD_DIRECTORY = "keypages"
-LINK_LENGTH = random.randint(2, 4)  # Random length between 5 and 10
+LINK_LENGTH = random.randint(2, 4)  # Random length
 GENERATED_KEYS_FILE = "generated_keys.txt"
+KEYS_GIVEN_OUT_FILE = os.path.join(UPLOAD_DIRECTORY, "keys_given_out.txt")  # File to store keys given out
+KEYS_GIVEN_OUT = 0
 
 def generate_random_link(length):
     characters = string.ascii_letters + string.digits
     return ''.join(random.choice(characters) for _ in range(length))
 
 def get_and_remove_key():
+    global KEYS_GIVEN_OUT
+
     with open(GENERATED_KEYS_FILE, "r") as file:
         keys = file.readlines()
 
     if keys:
-        key = keys[0].strip()  # Get the first key and remove leading/trailing whitespaces
+        key = keys[0].strip()
         with open(GENERATED_KEYS_FILE, "w") as file:
-            file.writelines(keys[1:])  # Write back the remaining keys (excluding the first one)
+            file.writelines(keys[1:])
+        KEYS_GIVEN_OUT += 1
+        with open(KEYS_GIVEN_OUT_FILE, "w") as count_file:
+            count_file.write(str(KEYS_GIVEN_OUT))  # Update the count in the file
         return key
     else:
         return None
@@ -34,19 +38,21 @@ class KeyServerHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        global KEYS_GIVEN_OUT
+
         if self.path == "/":
             self._set_response()
             num_keys = len(open(GENERATED_KEYS_FILE).readlines())
             response = f"<html><body>"
-            response += "<h1>Welcome to the Key Generator</h1>"
-            response += f"<p>This is a 1.1.1.1 Key Generator. Keys in stock: {num_keys}</p>"
+            response += "<h1>Welcome to the WARP+ Key Generator</h1>"
+            response += f"<p>Keys in stock: {num_keys}</p>"
+            response += f"<p>Keys given out: {KEYS_GIVEN_OUT}</p>"
             response += '<form method="post" action="/get_key">'
             response += '<input type="submit" value="Get Key">'
             response += '</form>'
             response += "</body></html>"
             self.wfile.write(response.encode())
         elif self.path.startswith("/keys/"):
-            # Serve the generated HTML pages from the keys directory
             page_path = os.path.join(UPLOAD_DIRECTORY, os.path.basename(self.path))
             if os.path.exists(page_path):
                 self._set_response()
@@ -64,25 +70,17 @@ class KeyServerHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == "/get_key":
             self._set_response()
-
-            # Get and remove a key from the list
             key = get_and_remove_key()
-
             if key:
-                # Generate a unique HTML page filename
                 while True:
                     page_link = generate_random_link(LINK_LENGTH)
                     page_filename = os.path.join(UPLOAD_DIRECTORY, page_link + ".html")
                     if not os.path.exists(page_filename):
                         break
-
-                # Create the HTML page with the retrieved key
                 with open(page_filename, 'w') as html_file:
                     html_file.write(f"<html><body><h1>Your Key</h1><p>{key}</p>")
-                    html_file.write('<a href="/">Home</a>')  # Add the Home button
+                    html_file.write('<a href="/">Home</a>')
                     html_file.write("</body></html>")
-
-                # Send the response with JavaScript for the delay
                 response = """
                 <html>
                 <head>
@@ -90,7 +88,7 @@ class KeyServerHandler(BaseHTTPRequestHandler):
                 <script>
                 setTimeout(function() {
                     window.location.href = '/keys/""" + page_link + """.html';
-                }, 2000); // 2-second delay
+                }, 2000);
                 </script>
                 </head>
                 <body>
@@ -106,7 +104,17 @@ class KeyServerHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write("Page not found.".encode())
 
+def load_keys_given_out():
+    global KEYS_GIVEN_OUT
+    if os.path.exists(KEYS_GIVEN_OUT_FILE):
+        with open(KEYS_GIVEN_OUT_FILE, "r") as count_file:
+            try:
+                KEYS_GIVEN_OUT = int(count_file.read())  # Load the count from the file
+            except ValueError:
+                pass
+
 def run():
+    load_keys_given_out()  # Load keys given out count
     server_address = ("", 8000)
     httpd = HTTPServer(server_address, KeyServerHandler)
     print("Server started on port 8000")
@@ -116,5 +124,5 @@ if __name__ == "__main__":
     if not os.path.exists(UPLOAD_DIRECTORY):
         os.makedirs(UPLOAD_DIRECTORY)
     if not os.path.exists(GENERATED_KEYS_FILE):
-        open(GENERATED_KEYS_FILE, "w").close()  # Create the keys file if it doesn't exist
+        open(GENERATED_KEYS_FILE, "w").close()
     run()
