@@ -2,6 +2,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import os
 import random
 import string
+import time
 
 UPLOAD_DIRECTORY = "keypages"
 LINK_LENGTH = random.randint(2, 4)  # Random length
@@ -81,18 +82,25 @@ class KeyServerHandler(BaseHTTPRequestHandler):
                     html_file.write(f"<html><body><h1>Your Key</h1><p>{key}</p>")
                     html_file.write('<a href="/">Home</a>')
                     html_file.write("</body></html>")
-                response = """
+                response = f"""
                 <html>
                 <head>
                 <title>Redirecting...</title>
                 <script>
-                setTimeout(function() {
-                    window.location.href = '/keys/""" + page_link + """.html';
-                }, 2000);
+                var count = 5;  // Countdown time in seconds
+                var countdown = setInterval(function() {{
+                    if (count > 0) {{
+                        document.getElementById('countdown').innerText = count;
+                        count--;
+                    }} else {{
+                        window.location.href = '/keys/{page_link}.html';
+                        clearInterval(countdown);
+                    }}
+                }}, 1000);
                 </script>
                 </head>
                 <body>
-                <p>You will be redirected to your key page shortly...</p>
+                <p>You will be redirected to your key shortly... (<span id="countdown">5</span>)</p>
                 </body>
                 </html>
                 """
